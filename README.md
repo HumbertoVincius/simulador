@@ -1,11 +1,12 @@
 # Simulador de Imóvel na Planta
 
-Simulador completo para compra de imóvel na planta com suporte a financiamento e consórcio.
+Simulador completo para compra de imóvel na planta com suporte a financiamento e consórcio. Interface moderna em modo dark com cálculos precisos de amortização, juros e taxas.
 
 ## Funcionalidades
 
 - **Entrada flexível**: Dinheiro à vista, consórcio ou composição de ambos
-- **Parcelas intermediárias**: Configure valor e quantidade de parcelas intermediárias
+- **Parcelas intermediárias**: Distribuídas uniformemente ao longo do período antes do financiamento
+- **Parcelas da construtora**: Configure valor e quantidade de parcelas da construtora
 - **Consórcio**: Suporte completo com correção INCC, taxa de administração e fundo de reserva
 - **Financiamento**: 
   - Sistema SAC ou PRICE
@@ -15,7 +16,9 @@ Simulador completo para compra de imóvel na planta com suporte a financiamento 
   - Taxa administrativa
   - Cálculo de CET (Custo Efetivo Total)
 - **Validação de renda**: Verifica se parcela está dentro do limite de 30% da renda
+- **Tamanho do imóvel**: Cálculo automático do valor por m²
 - **Relatório completo**: Cronograma mês a mês com todos os detalhes
+- **Exportação PDF**: Gere relatório completo em PDF
 
 ## Tecnologias
 
@@ -23,6 +26,7 @@ Simulador completo para compra de imóvel na planta com suporte a financiamento 
 - TypeScript
 - Tailwind CSS
 - React Hook Form
+- jsPDF (exportação de PDF)
 
 ## Instalação
 
@@ -36,9 +40,9 @@ npm install
 npm run dev
 ```
 
-O servidor iniciará na **porta 3000** por padrão.
+O servidor iniciará na **porta 4000** por padrão (configurado no package.json).
 
-Acesse [http://localhost:3000](http://localhost:3000) no navegador.
+Acesse [http://localhost:4000](http://localhost:4000) no navegador.
 
 ### Alterar a porta
 
@@ -77,12 +81,31 @@ npm start
 │   ├── SimulatorForm.tsx   # Formulário de entrada
 │   ├── ResultsTable.tsx    # Tabela de resultados
 │   └── SummaryCard.tsx     # Card de resumo
+├── components/
+│   ├── CurrencyInput.tsx   # Input formatado para valores monetários
+│   ├── SimulatorForm.tsx   # Formulário de entrada
+│   ├── ResultsTable.tsx    # Tabela de resultados
+│   └── SummaryCard.tsx     # Card de resumo
 ├── lib/
 │   ├── calculations.ts     # Funções principais de cálculo
 │   ├── financing.ts        # Lógica de financiamento
-│   └── consortium.ts       # Lógica de consórcio
+│   ├── consortium.ts       # Lógica de consórcio
+│   └── exportPDF.ts        # Exportação para PDF
 └── types/
     └── simulator.ts        # Tipos TypeScript
 
 ```
+
+## Uso
+
+1. Preencha os dados do imóvel (valor total, tamanho em m², entrada)
+2. Configure as parcelas intermediárias e da construtora
+3. Selecione o tipo de entrada (dinheiro, consórcio ou composição)
+4. Configure o financiamento (percentual ou valor fixo, sistema de amortização, taxas)
+5. Clique em "Calcular Simulação" para gerar o cronograma
+6. Use o botão "Exportar PDF" para gerar um relatório completo
+
+## Licença
+
+Este projeto é de código aberto e está disponível sob a licença MIT.
 
