@@ -43,6 +43,8 @@ export interface FinancingData {
 }
 
 export interface PropertyData {
+  nomeImovel: string;
+  endereco: string;
   valorTotal: number;
   tamanhoImovel: number; // em m²
   valorEntrada: number;
@@ -80,11 +82,14 @@ export interface MonthlyPayment {
 export interface SimulationResult {
   schedule: MonthlyPayment[];
   resumo: {
+    nomeImovel: string;
+    endereco: string;
     valorTotalPago: number;
     valorTotalImovel: number;
     tamanhoImovel: number;
     valorPorM2: number;
     valorFinanciado: number;
+    parcelaDuranteFinanciamento: number;
     totalJuros: number;
     totalSeguros: number;
     totalTaxas: number;

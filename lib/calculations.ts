@@ -95,12 +95,41 @@ export function generateMonthlySchedule(input: SimulatorInput): SimulationResult
     });
   }
 
-  // Calcular valor financiado
-  const valorFinanciado = input.financiamento.valorFinanciado ?? 
-    (input.financiamento.valorImovel * (input.financiamento.percentualFinanciamento ?? 0) / 100);
+  // Calcular valor já pago à construtora (entrada + intermediárias + construtora)
+  const valorPagoConstrutora = valorEntrada + 
+    (input.property.valorIntermediaria * input.property.quantidadeIntermediaria) +
+    (input.property.valorConstrutora * input.property.quantidadeConstrutora);
+  
+  // Calcular valor restante do imóvel não pago à construtora
+  const valorRestante = input.financiamento.valorImovel - valorPagoConstrutora;
+  
+  // Calcular valor financiado: restante do valor do imóvel não pago à construtora
+  // Se foi informado valor fixo ou percentual, usar esse valor
+  // Caso contrário, calcular como restante automaticamente
+  let valorFinanciado: number;
+  if (input.financiamento.valorFinanciado !== undefined && input.financiamento.valorFinanciado > 0) {
+    // Se foi informado valor fixo, usar esse valor
+    valorFinanciado = input.financiamento.valorFinanciado;
+  } else if (input.financiamento.percentualFinanciamento !== undefined && input.financiamento.percentualFinanciamento > 0) {
+    // Se foi informado percentual, calcular sobre o valor do imóvel
+    valorFinanciado = input.financiamento.valorImovel * (input.financiamento.percentualFinanciamento / 100);
+  } else {
+    // Se não foi informado, calcular como restante do valor do imóvel não pago à construtora
+    valorFinanciado = Math.max(0, valorRestante);
+  }
+  
+  // Garantir que o valor financiado não seja negativo
+  valorFinanciado = Math.max(0, valorFinanciado);
 
+  // Criar objeto de financiamento com valor financiado calculado
+  const financiamentoComValor = {
+    ...input.financiamento,
+    valorFinanciado: valorFinanciado,
+    percentualFinanciamento: undefined, // Limpar percentual já que temos valor fixo
+  };
+  
   // Gerar cronograma de financiamento
-  const financingSchedule = generateFinancingSchedule(input.financiamento);
+  const financingSchedule = generateFinancingSchedule(financiamentoComValor);
   
   // Gerar cronograma de consórcio (se aplicável)
   // Nota: Consórcio já contemplado, mas parcelas continuam sendo pagas
@@ -214,6 +243,19 @@ export function generateMonthlySchedule(input: SimulatorInput): SimulationResult
   // Encontrar maior parcela para validação de renda
   const maxInstallment = Math.max(...schedule.map(p => p.totalMes));
   
+  // Calcular parcela durante financiamento (parcela financiamento + consórcio se houver)
+  const mesesFinanciamento = schedule.filter(p => p.parcelaFinanciamento !== undefined && p.parcelaFinanciamento > 0);
+  let parcelaDuranteFinanciamento = 0;
+  if (mesesFinanciamento.length > 0) {
+    // Calcular média das parcelas durante o financiamento
+    const somaParcelas = mesesFinanciamento.reduce((sum, p) => {
+      const parcelaFinanc = p.parcelaFinanciamento ?? 0;
+      const parcelaConsorcio = p.parcelaConsorcio ?? 0;
+      return sum + parcelaFinanc + parcelaConsorcio;
+    }, 0);
+    parcelaDuranteFinanciamento = somaParcelas / mesesFinanciamento.length;
+  }
+  
   const cet = calculateCET(valorFinanciado, schedule);
 
   // Calcular valor por m²
@@ -223,11 +265,14 @@ export function generateMonthlySchedule(input: SimulatorInput): SimulationResult
   return {
     schedule,
     resumo: {
+      nomeImovel: input.property.nomeImovel || '',
+      endereco: input.property.endereco || '',
       valorTotalPago: totalAcumulado,
       valorTotalImovel: input.property.valorTotal,
       tamanhoImovel,
       valorPorM2,
       valorFinanciado,
+      parcelaDuranteFinanciamento,
       totalJuros,
       totalSeguros,
       totalTaxas,

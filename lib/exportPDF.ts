@@ -28,6 +28,23 @@ export function exportSimulationToPDF(result: SimulationResult) {
   doc.text('Simulação de Compra de Imóvel na Planta', pageWidth / 2, yPos, { align: 'center' });
   yPos += 10;
 
+  // Informações do Imóvel
+  const resumo = result.resumo;
+  if (resumo.nomeImovel || resumo.endereco) {
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    if (resumo.nomeImovel) {
+      doc.text(resumo.nomeImovel, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 6;
+    }
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    if (resumo.endereco) {
+      doc.text(resumo.endereco, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 6;
+    }
+  }
+
   // Data
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -43,18 +60,24 @@ export function exportSimulationToPDF(result: SimulationResult) {
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   
-  const resumo = result.resumo;
   const resumoData = [
     ['Valor Total do Imóvel', formatCurrency(resumo.valorTotalImovel)],
     ['Tamanho do Imóvel', `${resumo.tamanhoImovel.toFixed(2)} m²`],
     ['Valor por m²', formatCurrency(resumo.valorPorM2)],
     ['Valor Financiado', formatCurrency(resumo.valorFinanciado)],
+  ];
+  
+  if (resumo.parcelaDuranteFinanciamento > 0) {
+    resumoData.push(['Parcela Durante Financiamento', formatCurrency(resumo.parcelaDuranteFinanciamento)]);
+  }
+  
+  resumoData.push(
     ['Valor Total Pago', formatCurrency(resumo.valorTotalPago)],
     ['Total de Juros', formatCurrency(resumo.totalJuros)],
     ['Total de Seguros', formatCurrency(resumo.totalSeguros)],
     ['Total de Taxas', formatCurrency(resumo.totalTaxas)],
-    ['CET (Custo Efetivo Total)', formatPercent(resumo.cet)],
-  ];
+    ['CET (Custo Efetivo Total)', formatPercent(resumo.cet)]
+  );
 
   resumoData.forEach(([label, value]) => {
     doc.setFont('helvetica', 'bold');
@@ -98,36 +121,50 @@ export function exportSimulationToPDF(result: SimulationResult) {
     yPos += 10;
   }
 
-  // Cronograma (primeiras 30 linhas)
+  // Cronograma completo - todas as páginas
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text('Cronograma de Pagamento (Primeiros Meses)', margin, yPos);
+  doc.text('Cronograma de Pagamento Completo', margin, yPos);
   yPos += 8;
 
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   const headers = ['Mês', 'Entrada', 'Interm.', 'Constr.', 'Consórcio', 'Financ.', 'Total Mês', 'Total Acum.'];
   const colWidths = [15, 25, 25, 25, 25, 25, 30, 30];
-  let xPos = margin;
+  const rowHeight = 5;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const maxYPerPage = pageHeight - margin - 10; // Margem inferior
+  
+  // Função para adicionar cabeçalhos da tabela
+  const addTableHeaders = () => {
+    let xPos = margin;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    headers.forEach((header, i) => {
+      doc.text(header, xPos, yPos);
+      xPos += colWidths[i];
+    });
+    yPos += rowHeight;
+  };
 
-  headers.forEach((header, i) => {
-    doc.text(header, xPos, yPos);
-    xPos += colWidths[i];
-  });
-  yPos += 5;
+  // Adicionar cabeçalhos na primeira página
+  addTableHeaders();
 
   doc.setFont('helvetica', 'normal');
-  const maxRows = Math.min(30, result.schedule.length);
   
-  for (let i = 0; i < maxRows; i++) {
+  // Processar todas as linhas do cronograma
+  for (let i = 0; i < result.schedule.length; i++) {
     const payment = result.schedule[i];
     
-    if (yPos > doc.internal.pageSize.getHeight() - 20) {
+    // Verificar se precisa de nova página
+    if (yPos + rowHeight > maxYPerPage) {
       doc.addPage();
       yPos = margin;
+      // Adicionar cabeçalhos na nova página
+      addTableHeaders();
     }
 
-    xPos = margin;
+    let xPos = margin;
     const row = [
       payment.mes === 0 ? 'Entrada' : payment.mes.toString(),
       payment.entrada ? formatCurrency(payment.entrada) : '-',
@@ -144,14 +181,18 @@ export function exportSimulationToPDF(result: SimulationResult) {
       xPos += colWidths[j];
     });
 
-    yPos += 5;
+    yPos += rowHeight;
   }
 
-  if (result.schedule.length > 30) {
-    yPos += 5;
-    doc.setFont('helvetica', 'italic');
-    doc.text(`... e mais ${result.schedule.length - 30} meses`, margin, yPos);
+  // Adicionar rodapé com total de meses
+  if (yPos + 10 > maxYPerPage) {
+    doc.addPage();
+    yPos = margin;
   }
+  yPos += 5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text(`Total de meses simulados: ${result.schedule.length}`, margin, yPos);
 
   // Salvar PDF
   doc.save(`simulacao-imovel-${new Date().toISOString().split('T')[0]}.pdf`);

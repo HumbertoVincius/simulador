@@ -1,7 +1,6 @@
 'use client';
 
 import { SimulationResult } from '@/types/simulator';
-import { exportSimulationToPDF } from '@/lib/exportPDF';
 
 interface SummaryCardProps {
   result: SimulationResult;
@@ -26,7 +25,8 @@ export default function SummaryCard({ result }: SummaryCardProps) {
   const { resumo } = result;
   const diferenca = resumo.valorTotalPago - resumo.valorTotalImovel;
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    const { exportSimulationToPDF } = await import('@/lib/exportPDF');
     exportSimulationToPDF(result);
   };
 
@@ -44,6 +44,18 @@ export default function SummaryCard({ result }: SummaryCardProps) {
           Exportar PDF
         </button>
       </div>
+      
+      {/* Informações do Imóvel */}
+      {(resumo.nomeImovel || resumo.endereco) && (
+        <div className="bg-gray-700/50 p-4 rounded-lg mb-6 border border-gray-600">
+          {resumo.nomeImovel && (
+            <h3 className="text-lg font-bold text-white mb-1">{resumo.nomeImovel}</h3>
+          )}
+          {resumo.endereco && (
+            <p className="text-sm text-gray-300">{resumo.endereco}</p>
+          )}
+        </div>
+      )}
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-700/50">
@@ -72,6 +84,14 @@ export default function SummaryCard({ result }: SummaryCardProps) {
           <h3 className="text-sm font-medium text-gray-300 mb-1">Valor Financiado</h3>
           <p className="text-xl font-bold text-cyan-400">{formatCurrency(resumo.valorFinanciado)}</p>
         </div>
+        
+        {resumo.parcelaDuranteFinanciamento > 0 && (
+          <div className="bg-orange-900/30 p-4 rounded-lg border border-orange-700/50">
+            <h3 className="text-sm font-medium text-gray-300 mb-1">Parcela Durante Financiamento</h3>
+            <p className="text-xl font-bold text-orange-400">{formatCurrency(resumo.parcelaDuranteFinanciamento)}</p>
+            <p className="text-xs text-gray-400 mt-1">Financiamento + Consórcio (se houver)</p>
+          </div>
+        )}
         
         <div className="bg-red-900/30 p-4 rounded-lg border border-red-700/50">
           <h3 className="text-sm font-medium text-gray-300 mb-1">Total de Juros</h3>

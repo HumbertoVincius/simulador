@@ -11,6 +11,8 @@ interface SimulatorFormProps {
 export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
   const [formData, setFormData] = useState<SimulatorInput>({
     property: {
+      nomeImovel: '',
+      endereco: '',
       valorTotal: 0,
       tamanhoImovel: 0,
       valorEntrada: 0,
@@ -67,6 +69,32 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
       {/* Dados do Imóvel */}
       <section className="border-b border-gray-700 pb-6">
         <h3 className="text-lg font-semibold text-gray-300 mb-4">Dados do Imóvel</h3>
+        <div className="grid grid-cols-1 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Nome do Imóvel
+            </label>
+            <input
+              type="text"
+              value={formData.property.nomeImovel || ''}
+              onChange={(e) => handleChange('property.nomeImovel', e.target.value)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="Ex: Apartamento 2 quartos, Torre A"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Endereço
+            </label>
+            <input
+              type="text"
+              value={formData.property.endereco || ''}
+              onChange={(e) => handleChange('property.endereco', e.target.value)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="Ex: Rua Exemplo, 123 - Bairro - Cidade/UF"
+            />
+          </div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <CurrencyInput
             value={formData.property.valorTotal}
@@ -106,12 +134,6 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
               </div>
             </div>
           )}
-          <CurrencyInput
-            value={formData.property.valorEntrada}
-            onChange={(value) => handleChange('property.valorEntrada', value)}
-            label="Valor Entrada"
-            required
-          />
           <CurrencyInput
             value={formData.property.valorIntermediaria}
             onChange={(value) => handleChange('property.valorIntermediaria', value)}
@@ -161,7 +183,7 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
       {/* Tipo de Entrada */}
       <section className="border-b border-gray-700 pb-4">
         <h3 className="text-lg font-semibold text-gray-300 mb-3">Tipo de Entrada</h3>
-        <div className="flex flex-wrap gap-4">
+        <div className="flex flex-wrap gap-4 mb-4">
           {(['dinheiro', 'consorcio', 'composicao'] as EntryType[]).map((tipo) => (
             <label key={tipo} className="flex items-center cursor-pointer">
               <input
@@ -178,13 +200,35 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
             </label>
           ))}
         </div>
-      </section>
-
-      {/* Consórcio */}
-      {showConsortium && (
-        <section className="border-b border-gray-700 pb-6">
-          <h3 className="text-lg font-semibold text-gray-300 mb-4">Dados do Consórcio</h3>
+        
+        {/* Campos de entrada específicos baseados no tipo */}
+        {formData.tipoEntrada === 'dinheiro' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CurrencyInput
+              value={formData.property.valorEntrada}
+              onChange={(value) => handleChange('property.valorEntrada', value)}
+              label="Valor Entrada em Dinheiro"
+              required
+            />
+          </div>
+        )}
+        
+        {formData.tipoEntrada === 'consorcio' && (
+          <div className="bg-gray-700/30 p-3 rounded-md">
+            <p className="text-sm text-gray-300">
+              O valor de entrada será o valor de crédito do consórcio informado abaixo.
+            </p>
+          </div>
+        )}
+        
+        {formData.tipoEntrada === 'composicao' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CurrencyInput
+              value={formData.property.valorEntrada}
+              onChange={(value) => handleChange('property.valorEntrada', value)}
+              label="Valor Entrada em Dinheiro"
+              required
+            />
             <CurrencyInput
               value={formData.consorcio?.valorCredito || 0}
               onChange={(value) => {
@@ -200,8 +244,66 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
                 }
                 handleChange('consorcio.valorCredito', value);
               }}
-              label="Valor de Crédito"
+              label="Valor Entrada em Consórcio"
+              required
             />
+            <div className="md:col-span-2 bg-gray-700/30 p-3 rounded-md">
+              <p className="text-sm text-gray-300">
+                <span className="font-medium">Total da Entrada:</span>{' '}
+                <span className="text-primary-400 font-semibold">
+                  {new Intl.NumberFormat('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL',
+                  }).format((formData.property.valorEntrada || 0) + (formData.consorcio?.valorCredito || 0))}
+                </span>
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Consórcio */}
+      {showConsortium && (
+        <section className="border-b border-gray-700 pb-6">
+          <h3 className="text-lg font-semibold text-gray-300 mb-4">Dados do Consórcio</h3>
+          {formData.tipoEntrada === 'composicao' && (
+            <div className="bg-blue-900/30 border border-blue-700/50 p-3 rounded-md mb-4">
+              <p className="text-sm text-blue-300">
+                <span className="font-medium">ℹ️ Nota:</span> O valor de crédito do consórcio já foi informado acima na seção "Tipo de Entrada".
+              </p>
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {formData.tipoEntrada !== 'composicao' && (
+              <CurrencyInput
+                value={formData.consorcio?.valorCredito || 0}
+                onChange={(value) => {
+                  if (!formData.consorcio) {
+                    handleChange('consorcio', {
+                      valorCredito: 0,
+                      prazoPagamento: 120,
+                      taxaAdministracao: 0,
+                      taxaAdminTipo: 'distribuida',
+                      taxaINCC: 0,
+                      fundoReserva: 0,
+                    });
+                  }
+                  handleChange('consorcio.valorCredito', value);
+                }}
+                label="Valor de Crédito"
+              />
+            )}
+            {formData.tipoEntrada === 'composicao' && (
+              <div className="bg-gray-700/30 p-3 rounded-md">
+                <p className="text-sm text-gray-300 mb-1 font-medium">Valor de Crédito</p>
+                <p className="text-lg font-bold text-primary-400">
+                  {new Intl.NumberFormat('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL',
+                  }).format(formData.consorcio?.valorCredito || 0)}
+                </p>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
                 Prazo de Pagamento (meses)
@@ -271,6 +373,11 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
       <section className="pb-4">
         <h3 className="text-lg font-semibold text-gray-300 mb-4">Financiamento</h3>
         <div className="space-y-4">
+          <div className="bg-blue-900/20 border border-blue-700/50 p-3 rounded-md mb-4">
+            <p className="text-sm text-blue-300">
+              <span className="font-medium">ℹ️ Valor Financiado:</span> Será calculado automaticamente como o restante do valor do imóvel não pago à construtora (após entrada, intermediárias e parcelas da construtora).
+            </p>
+          </div>
           <div className="flex items-center gap-6 mb-4 p-3 bg-gray-700/50 rounded-md">
             <label className="flex items-center cursor-pointer">
               <input
@@ -319,9 +426,30 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
                   handleChange('financiamento.valorFinanciado', value);
                   handleChange('financiamento.percentualFinanciamento', undefined);
                 }}
-                label="Valor Financiado"
+                label="Valor Financiado (deixe vazio para calcular automaticamente)"
               />
             )}
+            {/* Mostrar valor restante calculado */}
+            {(() => {
+              const valorPagoConstrutora = formData.property.valorEntrada + 
+                (formData.property.valorIntermediaria * formData.property.quantidadeIntermediaria) +
+                (formData.property.valorConstrutora * formData.property.quantidadeConstrutora);
+              const valorRestante = formData.property.valorTotal - valorPagoConstrutora;
+              return (
+                <div className="bg-gray-700/30 p-3 rounded-md border border-gray-600">
+                  <p className="text-sm text-gray-300 mb-1 font-medium">Valor Restante (Calculado)</p>
+                  <p className="text-lg font-bold text-primary-400">
+                    {new Intl.NumberFormat('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                    }).format(Math.max(0, valorRestante))}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Valor do imóvel - (Entrada + Intermediárias + Construtora)
+                  </p>
+                </div>
+              );
+            })()}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
                 Prazo (anos)
@@ -336,6 +464,11 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
                 required
                 placeholder="20"
               />
+              {formData.financiamento.prazoAnos > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Equivale a {formData.financiamento.prazoAnos * 12} meses
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
