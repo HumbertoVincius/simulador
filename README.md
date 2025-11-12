@@ -78,10 +78,6 @@ npm start
 │   ├── page.tsx            # Página principal
 │   └── globals.css         # Estilos globais
 ├── components/
-│   ├── SimulatorForm.tsx   # Formulário de entrada
-│   ├── ResultsTable.tsx    # Tabela de resultados
-│   └── SummaryCard.tsx     # Card de resumo
-├── components/
 │   ├── CurrencyInput.tsx   # Input formatado para valores monetários
 │   ├── SimulatorForm.tsx   # Formulário de entrada
 │   ├── ResultsTable.tsx    # Tabela de resultados
