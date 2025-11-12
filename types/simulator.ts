@@ -77,6 +77,9 @@ export interface MonthlyPayment {
   totalMes: number;
   totalAcumulado: number;
   saldoDevedor?: number;
+  saldoDevedorFinanciamento?: number;
+  saldoDevedorConsorcio?: number;
+  saldoDevedorTotal?: number;
 }
 
 export interface SimulationResult {

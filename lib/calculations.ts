@@ -151,20 +151,16 @@ export function generateMonthlySchedule(input: SimulatorInput): SimulationResult
   // Calcular distribuição das parcelas intermediárias ao longo do período antes do financiamento
   // Período disponível: da entrada até o início do financiamento
   const inicioPeriodo = valorEntrada > 0 ? 1 : 0;
-  const periodoDisponivel = financingStartMonth - inicioPeriodo;
+  const periodoDisponivel = Math.max(0, financingStartMonth - inicioPeriodo);
   const quantidadeIntermediarias = input.property.quantidadeIntermediaria;
   
-  // Criar array com os meses onde as parcelas intermediárias serão pagas
   const mesesIntermediarias: Set<number> = new Set();
   if (quantidadeIntermediarias > 0 && periodoDisponivel > 0) {
-    // Distribuir uniformemente ao longo do período
     if (quantidadeIntermediarias >= periodoDisponivel) {
-      // Se há mais parcelas que meses disponíveis, distribuir mensalmente
       for (let mes = inicioPeriodo; mes < financingStartMonth; mes++) {
         mesesIntermediarias.add(mes);
       }
     } else {
-      // Distribuir uniformemente
       const intervalo = periodoDisponivel / (quantidadeIntermediarias + 1);
       for (let i = 0; i < quantidadeIntermediarias; i++) {
         const mes = Math.round(inicioPeriodo + (i + 1) * intervalo);
@@ -180,7 +176,6 @@ export function generateMonthlySchedule(input: SimulatorInput): SimulationResult
     ? Math.max(...consortiumSchedule.map(s => s.mes)) + 1 
     : 0;
 
-  // Determinar último mês da simulação
   const maxMesIntermediarias = mesesIntermediarias.size > 0 ? Math.max(...Array.from(mesesIntermediarias)) : 0;
   const lastMonth = Math.max(
     construtoraEndMonth,
@@ -189,34 +184,60 @@ export function generateMonthlySchedule(input: SimulatorInput): SimulationResult
     maxMesIntermediarias
   );
 
-  // Construir cronograma mês a mês
+  let saldoFinanciamentoRestante = Math.max(0, valorFinanciado);
+  let saldoConsorcioRestante = consortiumSchedule.reduce((sum, item) => sum + item.parcela, 0);
+
+  const isFinancingMonth = (mes: number) =>
+    mes >= financingStartMonth && mes < financingEndMonth;
+
+  if (valorEntrada > 0) {
+    totalAcumulado += valorEntrada;
+    const saldoFin = isFinancingMonth(0) ? saldoFinanciamentoRestante : 0;
+    const saldoCons = saldoConsorcioRestante;
+    schedule.push({
+      mes: 0,
+      entrada: valorEntrada,
+      totalMes: valorEntrada,
+      totalAcumulado,
+      saldoDevedor: saldoFin,
+      saldoDevedorFinanciamento: saldoFin,
+      saldoDevedorConsorcio: saldoCons,
+      saldoDevedorTotal: saldoFin + saldoCons,
+      pagoMaisSaldo: totalAcumulado + saldoFin + saldoCons,
+    });
+  }
+
   for (let mes = 1; mes <= lastMonth; mes++) {
     const payment: MonthlyPayment = {
       mes,
       totalMes: 0,
       totalAcumulado: 0,
+      saldoDevedor: isFinancingMonth(mes) ? saldoFinanciamentoRestante : 0,
+      saldoDevedorFinanciamento: isFinancingMonth(mes) ? saldoFinanciamentoRestante : 0,
+      saldoDevedorConsorcio: saldoConsorcioRestante,
+      saldoDevedorTotal:
+        (isFinancingMonth(mes) ? saldoFinanciamentoRestante : 0) + saldoConsorcioRestante,
+      pagoMaisSaldo: 0,
     };
 
-    // Parcela intermediária (distribuída ao longo do período antes do financiamento)
     if (mesesIntermediarias.has(mes)) {
       payment.parcelaIntermediaria = input.property.valorIntermediaria;
       payment.totalMes += input.property.valorIntermediaria;
     }
 
-    // Parcela da construtora
     if (mes >= construtoraStartMonth && mes < construtoraEndMonth) {
       payment.parcelaConstrutora = input.property.valorConstrutora;
       payment.totalMes += input.property.valorConstrutora;
     }
 
-    // Parcela consórcio
     const consortiumPayment = consortiumSchedule.find(s => s.mes === mes);
     if (consortiumPayment) {
       payment.parcelaConsorcio = consortiumPayment.parcela;
       payment.totalMes += consortiumPayment.parcela;
+      saldoConsorcioRestante = Math.max(0, saldoConsorcioRestante - consortiumPayment.parcela);
+      payment.saldoDevedorConsorcio = saldoConsorcioRestante;
     }
 
-    // Parcela financiamento
     const financingPayment = financingSchedule.find(s => s.mes === (mes - financingStartMonth + 1));
     if (financingPayment && mes >= financingStartMonth && mes < financingEndMonth) {
       payment.parcelaFinanciamento = financingPayment.total;
@@ -226,28 +247,30 @@ export function generateMonthlySchedule(input: SimulatorInput): SimulationResult
       payment.seguroDFI = financingPayment.seguroDFI;
       payment.taxaAdministrativa = financingPayment.taxaAdmin;
       payment.correcaoMonetaria = financingPayment.correcao;
-      payment.saldoDevedor = financingPayment.saldoFinal;
       payment.totalMes += financingPayment.total;
+      saldoFinanciamentoRestante = financingPayment.saldoFinal;
+      payment.saldoDevedorFinanciamento = saldoFinanciamentoRestante;
+      payment.saldoDevedor = saldoFinanciamentoRestante;
     }
 
-    totalAcumulado += payment.totalMes;
+    payment.saldoDevedorTotal =
+      (payment.saldoDevedorFinanciamento ?? 0) + (payment.saldoDevedorConsorcio ?? 0);
+
+    const previousTotal = totalAcumulado;
+    totalAcumulado = previousTotal + payment.totalMes;
     payment.totalAcumulado = totalAcumulado;
+    payment.pagoMaisSaldo = payment.totalAcumulado + payment.saldoDevedorTotal;
     schedule.push(payment);
   }
 
-  // Calcular resumo
   const totalJuros = schedule.reduce((sum, p) => sum + (p.juros ?? 0), 0);
   const totalSeguros = schedule.reduce((sum, p) => sum + (p.seguroMIP ?? 0) + (p.seguroDFI ?? 0), 0);
   const totalTaxas = schedule.reduce((sum, p) => sum + (p.taxaAdministrativa ?? 0), 0);
   
-  // Encontrar maior parcela para validação de renda
   const maxInstallment = Math.max(...schedule.map(p => p.totalMes));
-  
-  // Calcular parcela durante financiamento (parcela financiamento + consórcio se houver)
   const mesesFinanciamento = schedule.filter(p => p.parcelaFinanciamento !== undefined && p.parcelaFinanciamento > 0);
   let parcelaDuranteFinanciamento = 0;
   if (mesesFinanciamento.length > 0) {
-    // Calcular média das parcelas durante o financiamento
     const somaParcelas = mesesFinanciamento.reduce((sum, p) => {
       const parcelaFinanc = p.parcelaFinanciamento ?? 0;
       const parcelaConsorcio = p.parcelaConsorcio ?? 0;
@@ -258,7 +281,6 @@ export function generateMonthlySchedule(input: SimulatorInput): SimulationResult
   
   const cet = calculateCET(valorFinanciado, schedule);
 
-  // Calcular valor por m²
   const tamanhoImovel = input.property.tamanhoImovel || 0;
   const valorPorM2 = tamanhoImovel > 0 ? input.property.valorTotal / tamanhoImovel : 0;
 

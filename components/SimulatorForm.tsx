@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { SimulatorInput, EntryType, AmortizationSystem, RateType, CorrectionSystem, InsuranceType, AdminFeeType } from '@/types/simulator';
+import { useEffect, useMemo, useState } from 'react';
+import { SimulatorInput, EntryType, AmortizationSystem, RateType, CorrectionSystem, InsuranceType, AdminFeeType, ConsortiumData } from '@/types/simulator';
 import CurrencyInput from './CurrencyInput';
 
 interface SimulatorFormProps {
@@ -9,7 +9,16 @@ interface SimulatorFormProps {
 }
 
 export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
-  const [formData, setFormData] = useState<SimulatorInput>({
+  const defaultConsortium: ConsortiumData = {
+    valorCredito: 0,
+    prazoPagamento: 120,
+    taxaAdministracao: 0,
+    taxaAdminTipo: 'distribuida',
+    taxaINCC: 0,
+    fundoReserva: 0,
+  };
+
+  const defaultFormData: SimulatorInput = {
     property: {
       nomeImovel: '',
       endereco: '',
@@ -38,9 +47,10 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
       taxaAdministrativa: 0,
       taxaAdminTipo: 'fixo',
     },
-  });
+  };
 
-  const [usePercentualFinanciamento, setUsePercentualFinanciamento] = useState(true);
+  const [formData, setFormData] = useState<SimulatorInput>(defaultFormData);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const handleChange = (field: string, value: any) => {
     const keys = field.split('.');
@@ -55,13 +65,107 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
     });
   };
 
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('simulador:form-data');
+      if (stored) {
+        const parsed = JSON.parse(stored) as Partial<SimulatorInput>;
+        setFormData((prev) => ({
+          ...prev,
+          ...parsed,
+          property: {
+            ...prev.property,
+            ...(parsed?.property ?? {}),
+          },
+          financiamento: {
+            ...prev.financiamento,
+            ...(parsed?.financiamento ?? {}),
+            seguro: {
+              ...prev.financiamento.seguro,
+              ...(parsed?.financiamento?.seguro ?? {}),
+            },
+          },
+          consorcio: parsed.consorcio
+            ? {
+                ...defaultConsortium,
+                ...parsed.consorcio,
+              }
+            : undefined,
+        }));
+      }
+    } catch (error) {
+      console.error('Falha ao carregar dados salvos do simulador', error);
+    }
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    try {
+      localStorage.setItem('simulador:form-data', JSON.stringify(formData));
+    } catch (error) {
+      console.error('Falha ao salvar dados do simulador', error);
+    }
+  }, [formData, isHydrated]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    const valorEntradaDinheiro =
+      formData.tipoEntrada === 'dinheiro' || formData.tipoEntrada === 'composicao'
+        ? formData.property.valorEntrada
+        : 0;
+    const valorEntradaConsorcio =
+      formData.tipoEntrada === 'consorcio' || formData.tipoEntrada === 'composicao'
+        ? formData.consorcio?.valorCredito || 0
+        : 0;
+    const totalEntrada = valorEntradaDinheiro + valorEntradaConsorcio;
+    const totalIntermediarias =
+      formData.property.valorIntermediaria * formData.property.quantidadeIntermediaria;
+    const totalConstrutora =
+      formData.property.valorConstrutora * formData.property.quantidadeConstrutora;
+    const valorFinanciadoCalculado = Math.max(
+      0,
+      formData.property.valorTotal - totalEntrada - totalIntermediarias - totalConstrutora
+    );
+
+    onSubmit({
+      ...formData,
+      financiamento: {
+        ...formData.financiamento,
+        valorFinanciado: valorFinanciadoCalculado,
+        percentualFinanciamento: undefined,
+      },
+    });
   };
 
   const showConsortium = formData.tipoEntrada === 'consorcio' || formData.tipoEntrada === 'composicao';
   const showPostFixed = formData.financiamento.tipoTaxa === 'pos-fixada';
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }),
+    []
+  );
+
+  const valorEntradaDinheiro =
+    formData.tipoEntrada === 'dinheiro' || formData.tipoEntrada === 'composicao'
+      ? formData.property.valorEntrada
+      : 0;
+  const valorEntradaConsorcio =
+    formData.tipoEntrada === 'consorcio' || formData.tipoEntrada === 'composicao'
+      ? formData.consorcio?.valorCredito || 0
+      : 0;
+  const totalEntrada = valorEntradaDinheiro + valorEntradaConsorcio;
+  const totalIntermediarias =
+    formData.property.valorIntermediaria * formData.property.quantidadeIntermediaria;
+  const totalConstrutora =
+    formData.property.valorConstrutora * formData.property.quantidadeConstrutora;
+  const valorFinanciadoCalculado = Math.max(
+    0,
+    formData.property.valorTotal - totalEntrada - totalIntermediarias - totalConstrutora
+  );
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 bg-gray-800 p-6 rounded-lg shadow-lg">
@@ -125,57 +229,88 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
                 <p className="text-sm text-gray-300">
                   <span className="font-medium">Valor por m²:</span>{' '}
                   <span className="text-primary-400 font-semibold">
-                    {new Intl.NumberFormat('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL',
-                    }).format(formData.property.valorTotal / formData.property.tamanhoImovel)}
+                    {currencyFormatter.format(formData.property.valorTotal / formData.property.tamanhoImovel)}
                   </span>
                 </p>
               </div>
             </div>
           )}
-          <CurrencyInput
-            value={formData.property.valorIntermediaria}
-            onChange={(value) => handleChange('property.valorIntermediaria', value)}
-            label="Valor Parcela Intermediária"
-          />
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Quantidade Parcelas Intermediárias
-            </label>
-            <input
-              type="number"
-              min="0"
-              value={formData.property.quantidadeIntermediaria || ''}
-              onChange={(e) => handleChange('property.quantidadeIntermediaria', parseInt(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="0"
-            />
-          </div>
         </div>
       </section>
 
       {/* Parcelas da Construtora */}
       <section className="border-b border-gray-700 pb-6">
         <h3 className="text-lg font-semibold text-gray-300 mb-4">Parcelas da Construtora</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <CurrencyInput
-            value={formData.property.valorConstrutora}
-            onChange={(value) => handleChange('property.valorConstrutora', value)}
-            label="Valor Parcela da Construtora"
-          />
+        <div className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Quantidade Parcelas da Construtora
-            </label>
-            <input
-              type="number"
-              min="0"
-              value={formData.property.quantidadeConstrutora || ''}
-              onChange={(e) => handleChange('property.quantidadeConstrutora', parseInt(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="0"
-            />
+            <h4 className="text-sm font-semibold text-gray-200 mb-3 uppercase tracking-wide">Parcelas Intermediárias</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <CurrencyInput
+                value={formData.property.valorIntermediaria}
+                onChange={(value) => handleChange('property.valorIntermediaria', value)}
+                label="Valor Parcela Intermediária"
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Quantidade Parcelas Intermediárias
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.property.quantidadeIntermediaria || ''}
+                  onChange={(e) => handleChange('property.quantidadeIntermediaria', parseInt(e.target.value) || 0)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div className="bg-gray-700/30 p-3 rounded-md border border-gray-600 mt-3">
+              <p className="text-sm text-gray-300">
+                <span className="font-medium">Total Intermediárias:</span>{' '}
+                <span className="text-primary-400 font-semibold">
+                  {currencyFormatter.format(totalIntermediarias)}
+                </span>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {formData.property.quantidadeIntermediaria} parcelas de{' '}
+                {currencyFormatter.format(formData.property.valorIntermediaria || 0)}
+              </p>
+            </div>
+          </div>
+          <div className="border-t border-gray-700 pt-5">
+            <h4 className="text-sm font-semibold text-gray-200 mb-3 uppercase tracking-wide">Parcelas da Construtora</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <CurrencyInput
+                value={formData.property.valorConstrutora}
+                onChange={(value) => handleChange('property.valorConstrutora', value)}
+                label="Valor Parcela da Construtora"
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Quantidade Parcelas da Construtora
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.property.quantidadeConstrutora || ''}
+                  onChange={(e) => handleChange('property.quantidadeConstrutora', parseInt(e.target.value) || 0)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div className="bg-gray-700/30 p-3 rounded-md border border-gray-600 mt-3">
+              <p className="text-sm text-gray-300">
+                <span className="font-medium">Total Parcelas Construtora:</span>{' '}
+                <span className="text-primary-400 font-semibold">
+                  {currencyFormatter.format(totalConstrutora)}
+                </span>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {formData.property.quantidadeConstrutora} parcelas de{' '}
+                {currencyFormatter.format(formData.property.valorConstrutora || 0)}
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -233,14 +368,7 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
               value={formData.consorcio?.valorCredito || 0}
               onChange={(value) => {
                 if (!formData.consorcio) {
-                  handleChange('consorcio', {
-                    valorCredito: 0,
-                    prazoPagamento: 120,
-                    taxaAdministracao: 0,
-                    taxaAdminTipo: 'distribuida',
-                    taxaINCC: 0,
-                    fundoReserva: 0,
-                  });
+                      handleChange('consorcio', { ...defaultConsortium });
                 }
                 handleChange('consorcio.valorCredito', value);
               }}
@@ -251,10 +379,7 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
               <p className="text-sm text-gray-300">
                 <span className="font-medium">Total da Entrada:</span>{' '}
                 <span className="text-primary-400 font-semibold">
-                  {new Intl.NumberFormat('pt-BR', {
-                    style: 'currency',
-                    currency: 'BRL',
-                  }).format((formData.property.valorEntrada || 0) + (formData.consorcio?.valorCredito || 0))}
+                  {currencyFormatter.format((formData.property.valorEntrada || 0) + (formData.consorcio?.valorCredito || 0))}
                 </span>
               </p>
             </div>
@@ -279,14 +404,7 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
                 value={formData.consorcio?.valorCredito || 0}
                 onChange={(value) => {
                   if (!formData.consorcio) {
-                    handleChange('consorcio', {
-                      valorCredito: 0,
-                      prazoPagamento: 120,
-                      taxaAdministracao: 0,
-                      taxaAdminTipo: 'distribuida',
-                      taxaINCC: 0,
-                      fundoReserva: 0,
-                    });
+                    handleChange('consorcio', { ...defaultConsortium });
                   }
                   handleChange('consorcio.valorCredito', value);
                 }}
@@ -297,10 +415,7 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
               <div className="bg-gray-700/30 p-3 rounded-md">
                 <p className="text-sm text-gray-300 mb-1 font-medium">Valor de Crédito</p>
                 <p className="text-lg font-bold text-primary-400">
-                  {new Intl.NumberFormat('pt-BR', {
-                    style: 'currency',
-                    currency: 'BRL',
-                  }).format(formData.consorcio?.valorCredito || 0)}
+                  {currencyFormatter.format(formData.consorcio?.valorCredito || 0)}
                 </p>
               </div>
             )}
@@ -375,81 +490,24 @@ export default function SimulatorForm({ onSubmit }: SimulatorFormProps) {
         <div className="space-y-4">
           <div className="bg-blue-900/20 border border-blue-700/50 p-3 rounded-md mb-4">
             <p className="text-sm text-blue-300">
-              <span className="font-medium">ℹ️ Valor Financiado:</span> Será calculado automaticamente como o restante do valor do imóvel não pago à construtora (após entrada, intermediárias e parcelas da construtora).
+              <span className="font-medium">ℹ️ Valor Financiado:</span> Calculamos automaticamente descontando entrada, intermediárias e parcelas da construtora. Ajuste esses valores acima para atualizar o resultado em tempo real.
             </p>
           </div>
-          <div className="flex items-center gap-6 mb-4 p-3 bg-gray-700/50 rounded-md">
-            <label className="flex items-center cursor-pointer">
-              <input
-                type="radio"
-                checked={usePercentualFinanciamento}
-                onChange={() => setUsePercentualFinanciamento(true)}
-                className="mr-2 w-4 h-4 text-primary-500 focus:ring-primary-500 focus:ring-2"
-              />
-              <span className="text-sm font-medium text-gray-300">Percentual</span>
-            </label>
-            <label className="flex items-center cursor-pointer">
-              <input
-                type="radio"
-                checked={!usePercentualFinanciamento}
-                onChange={() => setUsePercentualFinanciamento(false)}
-                className="mr-2 w-4 h-4 text-primary-500 focus:ring-primary-500 focus:ring-2"
-              />
-              <span className="text-sm font-medium text-gray-300">Valor Fixo</span>
-            </label>
-          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {usePercentualFinanciamento ? (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Percentual de Financiamento (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="70"
-                  max="90"
-                  value={formData.financiamento.percentualFinanciamento || ''}
-                  onChange={(e) => {
-                    const percent = parseFloat(e.target.value) || 0;
-                    handleChange('financiamento.percentualFinanciamento', percent);
-                    handleChange('financiamento.valorFinanciado', undefined);
-                  }}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="70-90"
-                />
+            <div className="bg-gray-700/30 p-3 rounded-md border border-gray-600">
+              <p className="text-sm text-gray-300 mb-1 font-medium">Valor Financiado (Calculado)</p>
+              <p className="text-lg font-bold text-primary-400">
+                {currencyFormatter.format(valorFinanciadoCalculado)}
+              </p>
+              <p className="text-xs text-gray-400 mt-2">
+                Valor do imóvel - (Entrada total + Intermediárias + Construtora)
+              </p>
+              <div className="mt-3 space-y-1 text-xs text-gray-400">
+                <p>Entrada total: {currencyFormatter.format(totalEntrada)}</p>
+                <p>Intermediárias: {currencyFormatter.format(totalIntermediarias)}</p>
+                <p>Construtora: {currencyFormatter.format(totalConstrutora)}</p>
               </div>
-            ) : (
-              <CurrencyInput
-                value={formData.financiamento.valorFinanciado || 0}
-                onChange={(value) => {
-                  handleChange('financiamento.valorFinanciado', value);
-                  handleChange('financiamento.percentualFinanciamento', undefined);
-                }}
-                label="Valor Financiado (deixe vazio para calcular automaticamente)"
-              />
-            )}
-            {/* Mostrar valor restante calculado */}
-            {(() => {
-              const valorPagoConstrutora = formData.property.valorEntrada + 
-                (formData.property.valorIntermediaria * formData.property.quantidadeIntermediaria) +
-                (formData.property.valorConstrutora * formData.property.quantidadeConstrutora);
-              const valorRestante = formData.property.valorTotal - valorPagoConstrutora;
-              return (
-                <div className="bg-gray-700/30 p-3 rounded-md border border-gray-600">
-                  <p className="text-sm text-gray-300 mb-1 font-medium">Valor Restante (Calculado)</p>
-                  <p className="text-lg font-bold text-primary-400">
-                    {new Intl.NumberFormat('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL',
-                    }).format(Math.max(0, valorRestante))}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Valor do imóvel - (Entrada + Intermediárias + Construtora)
-                  </p>
-                </div>
-              );
-            })()}
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
                 Prazo (anos)
